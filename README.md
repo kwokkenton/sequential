@@ -13,4 +13,6 @@ Additional relevant materials:
 ## Contents
 `sequence_model.ipynb`: investigation of using a Multi-Layer Perceptron model to forecast a time series. Looks at an autoregressive model to extrapolate a sinusoid using various k-step ahead models. Main takeaway is that errors accumulate when this happens. Refers to Chapter 8.1 of d2l.ai. 
 `text_models.ipynb`: Refers to Chapters 8.2-3 of d2l.ai. 
+`rnn.ipynb`: Refers to the implementation of a recurrent neural network from scratch.  
+`concise_rnn.ipynb`: Uses high level api in Pytorch to code the same RNN. Refers to Chapters 8.6-7 of d2l.ai. 
 
