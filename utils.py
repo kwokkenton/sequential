@@ -7,6 +7,7 @@ import math
 import matplotlib.pyplot as plt
 from IPython import display
 from matplotlib_inline import backend_inline
+from torch.nn import functional as F
 
 
 class Timer:
@@ -306,3 +307,85 @@ def train(net, train_iter, vocab, lr, num_epochs, device,
     print(f'perplexity {ppl:.1f}, {speed:.1f} tokens/sec on {str(device)}')
     print(predict_new('time traveller'))
     print(predict_new('traveller'))
+
+
+class RNNModelScratch:
+    """ A RNN Model implemented from scratch. 
+        Wrapper class for the initialisatio and forward stepping function
+        This is general!
+    """
+
+    def __init__(self, vocab_size, num_hiddens, device,
+                 get_params, init_state, forward_fn):
+        """Initialisation of RNN
+
+        Args:
+            vocab_size (int): size of the vocabulary
+            num_hiddens (int): number of hidden units
+            device (torch.device): 'cpu' or 'cuda', where the tensor will be located
+            get_params (func): initialiser for RNN parameters
+            init_state (func): defines initial hidden state
+            forward_fn (func): function that steps forward in RNN
+        """
+        self.vocab_size, self.num_hiddens = vocab_size, num_hiddens
+        self.params = get_params(vocab_size, num_hiddens, device)
+        self.init_state, self.forward_fn = init_state, forward_fn
+
+    def __call__(self, X, state):
+        """steps forward"""
+        X = F.one_hot(X.T, self.vocab_size).type(torch.float32)
+        return self.forward_fn(X, state, self.params)
+
+    def begin_state(self, batch_size, device):
+        """initialisation """
+        return self.init_state(batch_size, self.num_hiddens, device)
+
+
+class RNNModel(nn.Module):
+    """The RNN model."""
+
+    def __init__(self, rnn_layer, vocab_size, **kwargs):
+        """_summary_
+
+        Args:
+            rnn_layer (_type_): _description_
+            vocab_size (_type_): _description_
+        """
+        super(RNNModel, self).__init__(**kwargs)
+        self.rnn = rnn_layer
+        self.vocab_size = vocab_size
+        self.num_hiddens = self.rnn.hidden_size
+
+        # If the RNN is bidirectional (to be introduced later),
+        # `num_directions` should be 2, else it should be 1.
+        if not self.rnn.bidirectional:
+            self.num_directions = 1
+            self.linear = nn.Linear(self.num_hiddens, self.vocab_size)
+        else:
+            self.num_directions = 2
+            self.linear = nn.Linear(self.num_hiddens * 2, self.vocab_size)
+
+    def forward(self, inputs, state):
+        X = F.one_hot(inputs.T.long(), self.vocab_size)
+        X = X.to(torch.float32)
+        Y, state = self.rnn(X, state)
+        # The fully connected layer will first change the shape of `Y` to
+        # (`num_steps` * `batch_size`, `num_hiddens`). Its output shape is
+        # (`num_steps` * `batch_size`, `vocab_size`).
+        output = self.linear(Y.reshape((-1, Y.shape[-1])))
+        return output, state
+
+    def begin_state(self, device, batch_size=1):
+        if not isinstance(self.rnn, nn.LSTM):
+            # `nn.GRU` takes a tensor as hidden state
+            return torch.zeros((self.num_directions * self.rnn.num_layers,
+                                batch_size, self.num_hiddens),
+                               device=device)
+        else:
+            # `nn.LSTM` takes a tuple of hidden states
+            return (torch.zeros((
+                self.num_directions * self.rnn.num_layers,
+                batch_size, self.num_hiddens), device=device),
+                torch.zeros((
+                    self.num_directions * self.rnn.num_layers,
+                    batch_size, self.num_hiddens), device=device))
